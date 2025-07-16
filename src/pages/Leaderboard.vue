@@ -48,8 +48,8 @@
               <td class="px-6 py-4 font-medium text-gray-900 dark:text-white">
                 {{ participant.nickname }}
               </td>
-              <td class="px-6 py-4">
-                {{ formatGameMode(participant.gameMode) }}
+              <td class="px-6 py-4 uppercase">
+                {{ participant.gameMode }}
               </td>
               <td class="px-6 py-4 font-bold text-blue-400">
                 {{ participant.totalScore }}
@@ -124,12 +124,15 @@ const participantsCollectionRef = collection(db, "participants");
 let unsubscribe = null;
 
 const sortedParticipants = computed(() => {
-  return [...participants.value].sort((a, b) => {
-    if (b.totalScore !== a.totalScore) {
-      return b.totalScore - a.totalScore;
-    }
-    return b.accuracyPercentage - a.accuracyPercentage;
-  });
+  return [...participants.value]
+    .sort((a, b) => {
+      if (a.totalScore !== b.totalScore) {
+        return b.totalScore - a.totalScore;
+      }
+
+      return b.accuracyPercentage - a.accuracyPercentage;
+    })
+    .slice(0, 10);
 });
 
 const winnersCount = computed(() => {
@@ -141,16 +144,6 @@ const averageScore = computed(() => {
   const total = participants.value.reduce((sum, p) => sum + p.totalScore, 0);
   return Math.round(total / participants.value.length);
 });
-
-const formatGameMode = (mode) => {
-  const modes = {
-    addition: "Addition",
-    subtraction: "Subtraction",
-    multiplication: "Multiplication",
-    division: "Division",
-  };
-  return modes[mode] || mode;
-};
 
 const getAccuracyColor = (percentage) => {
   if (percentage >= 80) return "text-green-400";
@@ -167,7 +160,7 @@ onMounted(() => {
         datas.push(doc.data());
       });
       participants.value = datas;
-      console.log("Real-time data update:", datas);
+      console.log("Real-time data update 🚀:", datas);
     },
     (error) => {
       console.error("Error listening to participants:", error);

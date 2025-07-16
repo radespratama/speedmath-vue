@@ -263,7 +263,13 @@
 <script setup>
 import { nanoid } from "nanoid";
 import { onMounted, ref, computed } from "vue";
-import { doc, setDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  collection,
+  getDocs,
+} from "firebase/firestore";
 
 import { db } from "../configs/firebase";
 
@@ -319,26 +325,6 @@ const currentQuestionData = ref({
 });
 
 const isProcessingAnswer = ref(false);
-
-// Anti-spam variables
-const lastSubmitTime = ref(0);
-const minSubmitInterval = 500; // 500ms minimum interval antara submit
-const submitAttempts = ref(0);
-const maxSubmitAttempts = 3; // Maximum 3 attempts per question
-const isSubmitBlocked = ref(false);
-const submitBlockUntil = ref(0);
-
-// Nickname spam protection
-const nicknameChangeCount = ref(0);
-const lastNicknameChange = ref(0);
-const maxNicknameChanges = 5; // Maximum 5 nickname changes per session
-
-// Rate limiting untuk startGame
-const lastGameStart = ref(0);
-const gameStartCooldown = 3000; // 3 seconds cooldown between game starts
-
-// Firebase update debounce
-let updateTimeout = null;
 
 let timer = null;
 
@@ -399,65 +385,8 @@ function playWinnerAudio() {
 }
 
 function handleInput(e) {
-  // Prevent rapid input changes
-  if (isProcessingAnswer.value) {
-    e.preventDefault();
-    return;
-  }
-
-  // Limit input length
-  if (e.target.value.length > 20) {
-    e.target.value = e.target.value.slice(0, 20);
-  }
-
-  const sanitizedValue = e.target.value.replace(/[^0-9.-/]/g, "");
+  const sanitizedValue = e.target.value.replace(/[^0-9.-/-]/g, "");
   userAnswer.value = sanitizedValue;
-}
-
-function handleNicknameChange() {
-  const now = Date.now();
-
-  // Check if too many changes in short time
-  if (now - lastNicknameChange.value < 1000) {
-    // 1 second cooldown
-    return;
-  }
-
-  if (nicknameChangeCount.value >= maxNicknameChanges) {
-    alert("Too many nickname changes! Please refresh the page.");
-    return;
-  }
-
-  nicknameChangeCount.value++;
-  lastNicknameChange.value = now;
-}
-
-function handleKeyDown(e) {
-  // Prevent multiple rapid Enter presses
-  if (e.key === "Enter") {
-    e.preventDefault();
-
-    // Check if can submit
-    if (
-      !isProcessingAnswer.value &&
-      !isSubmitBlocked.value &&
-      userAnswer.value.trim() &&
-      submitAttempts.value < maxSubmitAttempts
-    ) {
-      submitAnswer();
-    }
-  }
-}
-
-function blockSubmit(duration) {
-  isSubmitBlocked.value = true;
-  submitBlockUntil.value = Date.now() + duration;
-
-  setTimeout(() => {
-    if (Date.now() >= submitBlockUntil.value) {
-      isSubmitBlocked.value = false;
-    }
-  }, duration);
 }
 
 function shuffleArray(array) {
@@ -540,65 +469,14 @@ function calculateScore(timeRemaining, isCorrect) {
   return Math.round(baseScore + timeBonus + difficultyBonus);
 }
 
-async function debouncedFirebaseUpdate(data) {
-  if (updateTimeout) {
-    clearTimeout(updateTimeout);
-  }
-
-  updateTimeout = setTimeout(async () => {
-    try {
-      await updateDoc(participantsRef, data);
-    } catch (error) {
-      console.error("Error updating Firebase:", error);
-    }
-  }, 1000);
-}
-
 async function startGame() {
-  const now = Date.now();
-
-  if (now - lastGameStart.value < gameStartCooldown) {
-    alert("Please wait before starting a new game!");
-    return;
-  }
-
   if (!currentNickname.value.trim()) {
     alert("Please enter your nickname!");
     return;
   }
 
-  if (currentNickname.value.length > 20) {
-    alert("Nickname too long! Maximum 20 characters.");
-    return;
-  }
-
-  const inappropriateWords = [
-    "spam",
-    "test",
-    "admin",
-    "fuck",
-    "shit",
-    "bitch",
-    "damn",
-  ];
-
-  if (
-    inappropriateWords.some((word) =>
-      currentNickname.value.toLowerCase().includes(word)
-    )
-  ) {
-    alert("Please choose an appropriate nickname!");
-    return;
-  }
-
   if (!totalQuestions.value || totalQuestions.value < 1) {
     alert("Please enter a valid number of questions!");
-    return;
-  }
-
-  if (totalQuestions.value > 50) {
-    alert("Maximum 50 questions allowed!");
-    totalQuestions.value = 50;
     return;
   }
 
@@ -609,39 +487,30 @@ async function startGame() {
     return;
   }
 
-  lastGameStart.value = now;
+  await setDoc(doc(db, "participants", newId), {
+    nickname: currentNickname.value,
+    gameMode: gameModeRef.value,
+    totalQuestions: totalQuestions.value,
+    correctAnswers: 0,
+    accuracyPercentage: 0,
+    totalScore: 0,
+    isWinner: false,
+  });
 
-  try {
-    await setDoc(doc(db, "participants", newId), {
-      nickname: currentNickname.value,
-      gameMode: gameModeRef.value,
-      totalQuestions: totalQuestions.value,
-      correctAnswers: 0,
-      accuracyPercentage: 0,
-      totalScore: 0,
-      isWinner: false,
-      timestamp: now,
-    });
+  gameState.value = "playing";
+  score.value = 0;
+  currentQuestion.value = 0;
+  correctAnswers.value = 0;
+  timeLeft.value = selectedDifficulty.value.timePerQuestion;
+  isProcessingAnswer.value = false;
 
-    gameState.value = "playing";
-    score.value = 0;
-    currentQuestion.value = 0;
-    correctAnswers.value = 0;
-    timeLeft.value = selectedDifficulty.value.timePerQuestion;
-    isProcessingAnswer.value = false;
-    submitAttempts.value = 0;
+  currentQuestionData.value = getCurrentQuestion();
 
-    currentQuestionData.value = getCurrentQuestion();
+  startTimer();
 
-    startTimer();
-
-    setTimeout(() => {
-      answerInput.value?.focus();
-    }, 100);
-  } catch (error) {
-    console.error("Error starting game:", error);
-    alert("Failed to start game. Please try again.");
-  }
+  setTimeout(() => {
+    answerInput.value?.focus();
+  }, 100);
 }
 
 function startTimer() {
@@ -661,35 +530,6 @@ function startTimer() {
 
 function submitAnswer() {
   if (isProcessingAnswer.value) return;
-
-  if (isSubmitBlocked.value && Date.now() < submitBlockUntil.value) {
-    console.log("Submit blocked due to spam detection");
-    return;
-  }
-
-  const now = Date.now();
-  if (now - lastSubmitTime.value < minSubmitInterval) {
-    console.log("Submit too fast, ignoring");
-    return;
-  }
-
-  if (submitAttempts.value >= maxSubmitAttempts) {
-    console.log("Maximum submit attempts reached for this question");
-    blockSubmit(2000);
-    return;
-  }
-
-  if (!userAnswer.value.trim()) {
-    console.log("Empty answer, ignoring");
-    return;
-  }
-
-  lastSubmitTime.value = now;
-  submitAttempts.value++;
-
-  if (isSubmitBlocked.value && now >= submitBlockUntil.value) {
-    isSubmitBlocked.value = false;
-  }
 
   isProcessingAnswer.value = true;
   clearInterval(timer);
@@ -727,7 +567,6 @@ function submitAnswer() {
 function nextQuestion() {
   currentQuestion.value++;
   userAnswer.value = "";
-  submitAttempts.value = 0;
 
   if (currentQuestion.value >= totalQuestions.value) {
     finishGame();
@@ -759,12 +598,11 @@ async function finishGame() {
   if (score.value > bestScore.value) {
     bestScore.value = score.value;
 
-    debouncedFirebaseUpdate({
+    await updateDoc(participantsRef, {
       correctAnswers: correctAnswers.value,
       accuracyPercentage: accuracy,
       totalScore: score.value,
       isWinner,
-      completedAt: Date.now(),
     });
   }
 }
@@ -776,16 +614,6 @@ function resetGame() {
   isProcessingAnswer.value = false;
   randomizedQuestions.value = [];
   currentQuestionData.value = { question: "", answer: "" };
-
-  submitAttempts.value = 0;
-  lastSubmitTime.value = 0;
-  isSubmitBlocked.value = false;
-  submitBlockUntil.value = 0;
-
-  if (updateTimeout) {
-    clearTimeout(updateTimeout);
-    updateTimeout = null;
-  }
 
   if (gameOverAudio) {
     gameOverAudio.pause();

@@ -11,7 +11,7 @@
           Back to Home
         </RouterLink>
 
-        <h1 class="text-3xl font-bold text-white">Leaderboard</h1>
+        <h1 class="text-xl font-bold text-white">Leaderboard</h1>
       </div>
     </header>
 

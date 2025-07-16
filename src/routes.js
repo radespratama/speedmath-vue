@@ -1,6 +1,7 @@
 import HomePage from "./pages/Home.vue";
 import LeaderboardPage from "./pages/Leaderboard.vue";
 import MultiplayerPage from "./pages/Multiplayer.vue";
+import MultiplayerRoomPage from "./pages/MultiplayerRoom.vue";
 
 export const routes = [
   {
@@ -17,5 +18,10 @@ export const routes = [
     path: "/multiplayer",
     name: "multiplayer",
     component: MultiplayerPage,
+  },
+  {
+    path: "/multiplayer/:roomId",
+    name: "multiplayer-room",
+    component: MultiplayerRoomPage,
   },
 ];

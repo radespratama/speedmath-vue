@@ -137,7 +137,9 @@
 
         <button
           @click="startGame"
-          :disabled="isStartingGame || !currentNickname || !totalQuestions"
+          :disabled="
+            isStartingGame || !currentNickname || totalQuestions?.length < 1
+          "
           class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed px-8 py-4 rounded-lg font-bold text-lg cursor-pointer transition-all duration-200"
         >
           <span v-if="isStartingGame"> 🔄 Loading... </span>
@@ -309,7 +311,7 @@ const gameModeRef = ref("addition");
 const score = ref(0);
 const bestScore = ref(0);
 const currentQuestion = ref(0);
-const totalQuestions = ref(10);
+const totalQuestions = ref("");
 
 const timeLeft = ref(0);
 const correctAnswers = ref(0);

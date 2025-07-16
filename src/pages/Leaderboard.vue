@@ -27,6 +27,7 @@
               <th scope="col" class="px-6 py-3">Ranking</th>
               <th scope="col" class="px-6 py-3">Nickname</th>
               <th scope="col" class="px-6 py-3">Game Mode</th>
+              <th scope="col" class="px-6 py-3">Difficulty</th>
               <th scope="col" class="px-6 py-3">Total Score</th>
               <th scope="col" class="px-6 py-3">Accuracy</th>
               <th scope="col" class="px-6 py-3">Questions</th>
@@ -50,6 +51,9 @@
               </td>
               <td class="px-6 py-4 uppercase">
                 {{ participant.gameMode }}
+              </td>
+              <td class="px-6 py-4 uppercase">
+                {{ participant.difficulty?.name }}
               </td>
               <td class="px-6 py-4 font-bold text-blue-400">
                 {{ participant.totalScore }}

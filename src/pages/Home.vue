@@ -137,10 +137,11 @@
 
         <button
           @click="startGame"
-          :disabled="!currentNickname || !totalQuestions"
+          :disabled="isStartingGame || !currentNickname || !totalQuestions"
           class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed px-8 py-4 rounded-lg font-bold text-lg cursor-pointer transition-all duration-200"
         >
-          Start Game
+          <span v-if="isStartingGame"> 🔄 Loading... </span>
+          <span v-else>Start Game</span>
         </button>
       </div>
 
@@ -269,6 +270,8 @@ import {
   updateDoc,
   collection,
   getDocs,
+  query,
+  where,
 } from "firebase/firestore";
 
 import { db } from "../configs/firebase";
@@ -325,6 +328,7 @@ const currentQuestionData = ref({
 });
 
 const isProcessingAnswer = ref(false);
+const isStartingGame = ref(false);
 
 let timer = null;
 
@@ -469,6 +473,19 @@ function calculateScore(timeRemaining, isCorrect) {
   return Math.round(baseScore + timeBonus + difficultyBonus);
 }
 
+async function checkNicknameAvailability(nickname) {
+  try {
+    const participantsCollection = collection(db, "participants");
+    const q = query(participantsCollection, where("nickname", "==", nickname));
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.empty;
+  } catch (error) {
+    console.error("Error checking nickname availability:", error);
+    return false;
+  }
+}
+
 async function startGame() {
   if (!currentNickname.value.trim()) {
     alert("Please enter your nickname!");
@@ -480,37 +497,61 @@ async function startGame() {
     return;
   }
 
-  prepareRandomizedQuestions();
+  isStartingGame.value = true;
 
-  if (randomizedQuestions.value.length === 0) {
-    alert("No questions available for selected game mode!");
-    return;
+  try {
+    const isNicknameAvailable = await checkNicknameAvailability(
+      currentNickname.value.trim()
+    );
+
+    if (!isNicknameAvailable) {
+      alert("This nickname is already taken! Please choose another one.");
+      isStartingGame.value = false;
+      return;
+    }
+
+    prepareRandomizedQuestions();
+
+    if (randomizedQuestions.value.length === 0) {
+      alert("No questions available for selected game mode!");
+      isStartingGame.value = false;
+      return;
+    }
+
+    const now = new Date().getTime();
+
+    await setDoc(doc(db, "participants", newId), {
+      nickname: currentNickname.value.trim(),
+      gameMode: gameModeRef.value,
+      totalQuestions: totalQuestions.value,
+      correctAnswers: 0,
+      accuracyPercentage: 0,
+      totalScore: 0,
+      isWinner: false,
+      difficulty: selectedDifficulty.value,
+      createdAt: now,
+    });
+
+    gameState.value = "playing";
+    score.value = 0;
+    currentQuestion.value = 0;
+    correctAnswers.value = 0;
+    timeLeft.value = selectedDifficulty.value.timePerQuestion;
+    isProcessingAnswer.value = false;
+
+    currentQuestionData.value = getCurrentQuestion();
+
+    startTimer();
+
+    setTimeout(() => {
+      answerInput.value?.focus();
+    }, 100);
+  } catch (error) {
+    console.error("Error starting game:", error);
+    alert("Failed to start game. Please try again.");
+  } finally {
+    isStartingGame.value = false;
   }
-
-  await setDoc(doc(db, "participants", newId), {
-    nickname: currentNickname.value,
-    gameMode: gameModeRef.value,
-    totalQuestions: totalQuestions.value,
-    correctAnswers: 0,
-    accuracyPercentage: 0,
-    totalScore: 0,
-    isWinner: false,
-  });
-
-  gameState.value = "playing";
-  score.value = 0;
-  currentQuestion.value = 0;
-  correctAnswers.value = 0;
-  timeLeft.value = selectedDifficulty.value.timePerQuestion;
-  isProcessingAnswer.value = false;
-
-  currentQuestionData.value = getCurrentQuestion();
-
-  startTimer();
-
-  setTimeout(() => {
-    answerInput.value?.focus();
-  }, 100);
 }
 
 function startTimer() {
@@ -612,6 +653,7 @@ function resetGame() {
 
   clearInterval(timer);
   isProcessingAnswer.value = false;
+  isStartingGame.value = false;
   randomizedQuestions.value = [];
   currentQuestionData.value = { question: "", answer: "" };
 

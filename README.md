@@ -41,8 +41,8 @@ Make sure you have installed:
 ### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/username/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/radespratama/speedmath-vue.git
+cd speedmath-vue
 ```
 
 ### 3. Install Depedencies
